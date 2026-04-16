@@ -1,0 +1,81 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    match /adminContent/{document=**} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /adminActivity/{document=**} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /ruleVersions/{document=**} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /categories/{document=**} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /teams/{document=**} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /judges/{document=**} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /sponsors/{document=**} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isSignedIn();
+    }
+
+    match /settings/{document=**} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /votes/{document=**} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /seasonVotes/{document=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    match /seasonVoteDevices/{document=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    match /seasonVotePhones/{document=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    match /registrations/{document=**} {
+      allow create: if true;
+      allow read, update, delete: if isSignedIn();
+    }
+
+    match /contacts/{document=**} {
+      allow create: if true;
+      allow read, update, delete: if isSignedIn();
+    }
+  }
+}
