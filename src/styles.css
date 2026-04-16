@@ -838,7 +838,12 @@ p {
   }
 }
 
+/* ============================= */
+/* 📱 MOBILE RESPONSIVE SYSTEM */
+/* ============================= */
+
 @media (max-width: 768px) {
+  /* ===== GLOBAL ===== */
   body {
     font-size: 14px;
   }
@@ -851,9 +856,8 @@ p {
   .dashboard-main {
     gap: 0.8rem;
   }
-}
 
-@media (max-width: 768px) {
+  /* ===== SIDEBAR (APP DRAWER) ===== */
   .sidebar {
     position: fixed;
     top: 0;
@@ -861,16 +865,15 @@ p {
     width: 80%;
     height: 100vh;
     z-index: 100;
-    transition: left 0.3s ease;
     border-radius: 0;
+    transition: left 0.3s ease;
   }
 
   .sidebar.open {
     left: 0;
   }
-}
 
-@media (max-width: 768px) {
+  /* ===== HEADER ===== */
   .dashboard-header {
     flex-direction: column;
     align-items: flex-start;
@@ -879,9 +882,12 @@ p {
   .premium-header {
     padding: 1rem;
   }
-}
 
-@media (max-width: 768px) {
+  .header-status-row {
+    flex-wrap: wrap;
+  }
+
+  /* ===== CARDS ===== */
   .section-card,
   .preview-panel,
   .editor-block,
@@ -890,9 +896,38 @@ p {
     padding: 1rem;
     border-radius: 18px;
   }
-}
 
-@media (max-width: 768px) {
+  .section-card-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.6rem;
+  }
+
+  /* ===== BUTTONS ===== */
+  button,
+  .primary-button,
+  .ghost-button,
+  .danger-button {
+    width: 100%;
+    padding: 14px;
+    font-size: 15px;
+  }
+
+  .button-row,
+  .section-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* ===== FORMS ===== */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+    padding: 1rem;
+  }
+
+  /* ===== GRID SYSTEM ===== */
   .grid-two {
     grid-template-columns: 1fr;
   }
@@ -911,51 +946,111 @@ p {
   .registration-meta-grid {
     grid-template-columns: 1fr 1fr;
   }
-}
 
-@media (max-width: 768px) {
-  button {
-    width: 100%;
-    padding: 12px;
-    font-size: 15px;
+  /* ===== STACKS ===== */
+  .stack-sm,
+  .stack-md,
+  .stack-lg {
+    gap: 0.6rem;
   }
 
-  .button-row {
-    flex-direction: column;
+  /* ===== TABLE ===== */
+  .table-shell {
+    overflow-x: auto;
   }
-}
 
-@media (max-width: 768px) {
   .data-table {
     min-width: 600px;
   }
 
-  .table-shell {
-    overflow-x: auto;
+  /* ===== LEADERBOARD ===== */
+  .leaderboard-matrix {
+    min-width: 700px;
   }
-}
 
-@media (max-width: 768px) {
-  input,
-  textarea,
-  select {
-    font-size: 16px;
-    padding: 1rem;
+  .leaderboard-matrix-header,
+  .leaderboard-matrix-row {
+    grid-template-columns: 80px repeat(4, minmax(120px, 1fr));
   }
-}
 
-@media (max-width: 768px) {
+  /* ===== VOTES CARD ===== */
   .vote-rank-card {
     grid-template-columns: 1fr;
     text-align: center;
+    gap: 0.6rem;
   }
-}
 
-@media (max-width: 768px) {
+  /* ===== REGISTRATION ===== */
+  .registration-folder-head,
+  .registration-entry-head,
+  .registration-file-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  /* ===== SNACKBAR ===== */
   .snackbar {
     left: 10px;
     right: 10px;
     bottom: 10px;
     min-width: auto;
+    max-width: none;
+  }
+
+  /* ===== SWITCH ===== */
+  .switch {
+    width: 56px;
+    height: 32px;
+  }
+
+  .switch-thumb {
+    width: 24px;
+    height: 24px;
+  }
+
+  .switch.is-on .switch-thumb {
+    transform: translateX(24px);
+  }
+
+  /* ===== IMAGE / PREVIEW ===== */
+  .preview-image {
+    min-height: 70px;
+    padding: 0.8rem;
+  }
+
+  /* ===== TEXT ===== */
+  h1 {
+    font-size: 20px;
+  }
+
+  h2 {
+    font-size: 18px;
+  }
+
+  h3 {
+    font-size: 16px;
+  }
+}
+
+/* ============================= */
+/* 📱 EXTRA SMALL DEVICES */
+/* ============================= */
+
+@media (max-width: 480px) {
+  .dashboard-shell {
+    padding: 0.6rem;
+  }
+
+  .section-card,
+  .preview-panel {
+    padding: 0.8rem;
+  }
+
+  .registration-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .leaderboard-matrix {
+    min-width: 600px;
   }
 }
