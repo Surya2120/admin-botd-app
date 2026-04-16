@@ -839,46 +839,47 @@ p {
 }
 
 /* ===================================== */
-/* 📱 COMPLETE MOBILE RESPONSIVE SYSTEM */
+/* 📱 APP-STYLE MOBILE UX (FINAL FIX) */
 /* ===================================== */
 
 @media (max-width: 768px) {
 
   /* ===== GLOBAL ===== */
   body {
-    font-size: 14px;
+    font-size: 15px;
   }
 
   .dashboard-shell {
-    grid-template-columns: 1fr;
-    padding: 0.7rem;
+    display: flex;
+    flex-direction: column;
+    padding: 0.6rem;
+    gap: 0.6rem;
   }
 
   .dashboard-main {
-    gap: 0.7rem;
+    gap: 0.8rem;
   }
 
   /* ===================================== */
-  /* 🔥 MOBILE NAV (SIDEBAR → TOP TABS) */
+  /* 🔥 NAVIGATION → STICKY APP BAR */
   /* ===================================== */
 
   .sidebar {
     position: sticky;
     top: 0;
-    width: 100%;
+    z-index: 100;
     height: auto;
     padding: 0.5rem;
-    border-radius: 14px;
+    border-radius: 16px;
     overflow-x: auto;
-    z-index: 50;
+    background: rgba(20,17,29,0.95);
+    backdrop-filter: blur(10px);
   }
 
   .sidebar-nav {
     display: flex;
-    flex-direction: row;
     gap: 0.5rem;
     overflow-x: auto;
-    padding-bottom: 6px;
   }
 
   .sidebar-nav::-webkit-scrollbar {
@@ -887,21 +888,17 @@ p {
 
   .sidebar-link {
     flex: 0 0 auto;
-    padding: 0.6rem 0.9rem;
+    padding: 0.55rem 0.9rem;
     border-radius: 999px;
     font-size: 13px;
     white-space: nowrap;
-    background: rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.06);
   }
 
   .sidebar-link.is-active {
     background: linear-gradient(135deg, #d6a74f, #9c6d1b);
     color: #140d03;
     font-weight: 700;
-  }
-
-  .sidebar > *:not(.sidebar-nav) {
-    display: none;
   }
 
   /* ===================================== */
@@ -911,20 +908,15 @@ p {
   .dashboard-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.5rem;
+    gap: 0.6rem;
   }
 
   .premium-header {
     padding: 1rem;
   }
 
-  .header-status-row {
-    flex-wrap: wrap;
-    gap: 0.4rem;
-  }
-
   /* ===================================== */
-  /* 🧱 CARDS */
+  /* 🧱 CARDS → APP STYLE */
   /* ===================================== */
 
   .section-card,
@@ -933,7 +925,7 @@ p {
   .stat-card,
   .control-card {
     padding: 1rem;
-    border-radius: 16px;
+    border-radius: 18px;
   }
 
   .section-card-head {
@@ -943,7 +935,7 @@ p {
   }
 
   /* ===================================== */
-  /* 🔘 BUTTONS */
+  /* 🔘 BUTTONS → THUMB FRIENDLY */
   /* ===================================== */
 
   button,
@@ -953,12 +945,14 @@ p {
     width: 100%;
     padding: 14px;
     font-size: 15px;
+    border-radius: 14px;
   }
 
   .button-row,
   .section-actions {
     flex-direction: column;
     align-items: stretch;
+    gap: 0.5rem;
   }
 
   /* ===================================== */
@@ -973,13 +967,10 @@ p {
   }
 
   /* ===================================== */
-  /* 📊 GRID SYSTEM */
+  /* 📊 GRID → SINGLE COLUMN */
   /* ===================================== */
 
-  .grid-two {
-    grid-template-columns: 1fr;
-  }
-
+  .grid-two,
   .collection-grid,
   .stat-grid,
   .control-grid,
@@ -996,7 +987,7 @@ p {
   }
 
   /* ===================================== */
-  /* 📋 TABLE */
+  /* 📋 TABLE → MOBILE SAFE */
   /* ===================================== */
 
   .table-shell {
@@ -1004,7 +995,7 @@ p {
   }
 
   .data-table {
-    min-width: 600px;
+    min-width: 650px;
   }
 
   /* ===================================== */
@@ -1012,7 +1003,7 @@ p {
   /* ===================================== */
 
   .leaderboard-matrix {
-    min-width: 700px;
+    min-width: 650px;
   }
 
   .leaderboard-matrix-header,
@@ -1027,7 +1018,7 @@ p {
   .vote-rank-card {
     grid-template-columns: 1fr;
     text-align: center;
-    gap: 0.5rem;
+    gap: 0.6rem;
   }
 
   /* ===================================== */
@@ -1051,43 +1042,7 @@ p {
     right: 10px;
     bottom: 10px;
     min-width: auto;
-    max-width: none;
   }
-
-  /* ===================================== */
-  /* 🎚️ SWITCH */
-  /* ===================================== */
-
-  .switch {
-    width: 56px;
-    height: 32px;
-  }
-
-  .switch-thumb {
-    width: 24px;
-    height: 24px;
-  }
-
-  .switch.is-on .switch-thumb {
-    transform: translateX(24px);
-  }
-
-  /* ===================================== */
-  /* 🖼️ PREVIEW */
-  /* ===================================== */
-
-  .preview-image {
-    min-height: 70px;
-    padding: 0.7rem;
-  }
-
-  /* ===================================== */
-  /* 🔤 TEXT */
-  /* ===================================== */
-
-  h1 { font-size: 20px; }
-  h2 { font-size: 18px; }
-  h3 { font-size: 16px; }
 
 }
 
@@ -1097,8 +1052,12 @@ p {
 
 @media (max-width: 480px) {
 
+  body {
+    font-size: 14px;
+  }
+
   .dashboard-shell {
-    padding: 0.5rem;
+    padding: 0.4rem;
   }
 
   .section-card,
@@ -1108,10 +1067,6 @@ p {
 
   .registration-meta-grid {
     grid-template-columns: 1fr;
-  }
-
-  .leaderboard-matrix {
-    min-width: 600px;
   }
 
 }
