@@ -1,6 +1,6 @@
 {
-  "name": "BOTD Admin",
-  "short_name": "BOTD",
+  "name": "BOTD Admin Panel",
+  "short_name": "BOTD Admin",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#172033",
@@ -8,14 +8,15 @@
   "icons": [
     {
       "src": "/icon.png",
-      "background_color": "#172033",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "/icon.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
