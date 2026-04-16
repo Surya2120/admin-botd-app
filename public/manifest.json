@@ -8,6 +8,7 @@
   "icons": [
     {
       "src": "/icon.png",
+      "background_color": "#172033",
       "sizes": "192x192",
       "type": "image/png"
     },
