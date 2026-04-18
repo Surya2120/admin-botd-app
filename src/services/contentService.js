@@ -44,6 +44,7 @@ export const collections = {
   sponsors: "sponsors",
   registrations: "registrations",
   contacts: "contacts",
+  registrationInterest: "registrationInterest",
   votes: "votes",
   posters: "posters",
   videos: "videos"
@@ -112,6 +113,7 @@ export async function seedAdminContentIfNeeded(actor = "system") {
       showVotes: false,
       showLeaderboard: true,
       registrationOpen: true,
+      showInterestButton: true,
       registrationClosedMessage: "AUDITIONS OPEN ON 20th APRIL"
     },
     actor
@@ -527,7 +529,7 @@ export async function fetchCollectionItems(name, options = {}) {
   }
 
   const requestedOrder = options.orderBy
-    || ((name === collections.registrations || name === collections.contacts)
+    || ((name === collections.registrations || name === collections.contacts || name === collections.registrationInterest)
       ? { field: "createdAt", direction: "desc" }
       : null);
 

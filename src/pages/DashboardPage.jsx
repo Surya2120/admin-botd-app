@@ -83,6 +83,7 @@ const DEFAULT_UI_CONTROLS = {
   showVotes: false,
   showLeaderboard: true,
   registrationOpen: true,
+  showInterestButton: true,
   registrationClosedMessage: "AUDITIONS OPEN ON 20th APRIL",
 };
 const DEFAULT_EVENT_SIGNALS = { partyBlast: null };
@@ -1402,7 +1403,12 @@ function RegistrationSection({ actor, notify }) {
     (onData, onError) => subscribeSettingsDoc(settingsDocs.uiControls, DEFAULT_UI_CONTROLS, onData, onError),
     DEFAULT_UI_CONTROLS
   );
+  const interestState = useFirestoreSubscription(
+    (onData, onError) => subscribeCollection(collections.registrationInterest, onData, onError),
+    []
+  );
   const [controlSaving, setControlSaving] = useState("");
+  const interestEntries = interestState.data || [];
 
   async function updateRegistrationPortal(registrationOpen) {
     if (!window.confirm(`Are you sure you want to ${registrationOpen ? "open" : "close"} the registration portal on the live website?`)) {
@@ -1424,12 +1430,32 @@ function RegistrationSection({ actor, notify }) {
     }
   }
 
-  if (uiControlsState.loading) {
+  async function updateInterestButton(showInterestButton) {
+    if (!window.confirm(`Are you sure you want to ${showInterestButton ? "show" : "hide"} the I'm Interested button on the live website?`)) {
+      return;
+    }
+
+    setControlSaving("showInterestButton");
+    try {
+      await saveSettingsDoc(
+        settingsDocs.uiControls,
+        { ...uiControlsState.data, showInterestButton },
+        actor,
+        `Updated showInterestButton`,
+        uiControlsState.data
+      );
+      notify?.(`I'm Interested button ${showInterestButton ? "shown" : "hidden"}.`, "success");
+    } finally {
+      setControlSaving("");
+    }
+  }
+
+  if (uiControlsState.loading || interestState.loading) {
     return <SectionSkeleton blocks={2} />;
   }
 
-  if (uiControlsState.error) {
-    return <div className="section-card form-error">{uiControlsState.error}</div>;
+  if (uiControlsState.error || interestState.error) {
+    return <div className="section-card form-error">{uiControlsState.error || interestState.error}</div>;
   }
 
   return (
@@ -1446,15 +1472,30 @@ function RegistrationSection({ actor, notify }) {
             loading={controlSaving === "registrationOpen"}
             onChange={updateRegistrationPortal}
           />
+          <RealtimeControlCard
+            label="I'm Interested Button"
+            description="Show or hide the interest button below the registration payment action."
+            checked={uiControlsState.data?.showInterestButton !== false}
+            loading={controlSaving === "showInterestButton"}
+            onChange={updateInterestButton}
+          />
         </div>
         <PreviewPanel title="Registration Status Preview">
           <div className={`status-chip ${uiControlsState.data?.registrationOpen ? "is-open" : "is-closed"}`}>
             {uiControlsState.data?.registrationOpen ? "Registration Open" : "Registration Closed"}
           </div>
+          <div className={`status-chip ${uiControlsState.data?.showInterestButton !== false ? "is-open" : "is-closed"}`}>
+            {interestEntries.length} Interested
+          </div>
           <p>
             {uiControlsState.data?.registrationOpen
               ? "The website registration form is enabled for participants."
               : (uiControlsState.data?.registrationClosedMessage || "AUDITIONS OPEN ON 20th APRIL")}
+          </p>
+          <p>
+            {uiControlsState.data?.showInterestButton !== false
+              ? "The interest button is visible on the registration page."
+              : "The interest button is hidden from the registration page."}
           </p>
         </PreviewPanel>
       </div>
@@ -1985,6 +2026,10 @@ function DataHubSection({ notify }) {
     (onData, onError) => subscribeSponsorLeads(onData, onError),
     []
   );
+  const interestState = useFirestoreSubscription(
+    (onData, onError) => subscribeCollection(collections.registrationInterest, onData, onError),
+    []
+  );
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [statusBusy, setStatusBusy] = useState("");
@@ -1992,8 +2037,9 @@ function DataHubSection({ notify }) {
   const registrations = registrationsState.data || [];
   const contacts = contactsState.data || [];
   const sponsorLeads = sponsorLeadsState.data || [];
-  const loading = registrationsState.loading || contactsState.loading || sponsorLeadsState.loading;
-  const error = registrationsState.error || contactsState.error || sponsorLeadsState.error;
+  const interestRows = interestState.data || [];
+  const loading = registrationsState.loading || contactsState.loading || sponsorLeadsState.loading || interestState.loading;
+  const error = registrationsState.error || contactsState.error || sponsorLeadsState.error || interestState.error;
 
   const filteredRegistrations = useMemo(() => {
     const normalizedQuery = debouncedQuery.trim().toLowerCase();
@@ -2182,6 +2228,19 @@ function DataHubSection({ notify }) {
           { key: "email", label: "Email" },
           { key: "interest", label: "Interest", render: (row) => row.interest || row.category || "-" },
           { key: "createdAt", label: "Received", render: (row) => formatDate(row.createdAt) }
+        ]}
+      />
+      <DataTableCard
+        title="Registration Interest"
+        subtitle="People who tapped I'm Interested on the registration page."
+        rows={interestRows}
+        defaultSortKey="createdAt"
+        columns={[
+          { key: "name", label: "Name", render: (row) => row.name || "Interested visitor" },
+          { key: "phone", label: "Phone" },
+          { key: "email", label: "Email" },
+          { key: "category", label: "Category" },
+          { key: "createdAt", label: "Recorded", render: (row) => formatDate(row.createdAt) }
         ]}
       />
     </div>

@@ -87,6 +87,11 @@ service cloud.firestore {
       allow read, update, delete: if isSignedIn();
     }
 
+    match /registrationInterest/{document=**} {
+      allow create, update: if true;
+      allow read, delete: if isSignedIn();
+    }
+
     match /contacts/{document=**} {
       allow create: if true;
       allow read, update, delete: if isSignedIn();
