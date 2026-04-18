@@ -1,0 +1,13 @@
+{
+  "rules": {
+    "contestants": {
+      ".read": true,
+      ".write": "auth != null",
+      "$contestantId": {
+        ".validate": "newData.val() === null || newData.hasChildren(['id', 'name', 'categoryId'])"
+      }
+    },
+    ".read": false,
+    ".write": false
+  }
+}

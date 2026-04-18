@@ -70,57 +70,6 @@ export const defaultCategories = [
   { id: "open-solo", code: "OS", name: "Open Solo", description: "10 dancers", image: "", isActive: true }
 ];
 
-export const defaultContestants = [
-  ...Array.from({ length: 15 }, (_, index) => ({
-    id: `ag-${index + 1}`,
-    name: ["Team Alpha", "Team Beta", "Team Gamma", "Team Delta", "Team Epsilon", "Team Zeta", "Team Eta", "Team Theta", "Team Iota", "Team Kappa", "Team Lambda", "Team Mu", "Team Nu", "Team Xi", "Team Omicron"][index],
-    city: "Bangalore",
-    image: `assets/images/Contestent/AG/AG_CON_ (${index + 1}).jpg`,
-    categoryId: "AG",
-    bio: "",
-    buttonLabel: "",
-    buttonHref: "",
-    votes: 0,
-    isVisible: true
-  })),
-  ...Array.from({ length: 15 }, (_, index) => ({
-    id: `kg-${index + 1}`,
-    name: ["Team Pulse", "Team Spark", "Team Motion", "Team Orbit", "Team Junior Beat", "Team Rhythm Kids", "Team Flash", "Team Bounce", "Team Starlight", "Team Junior Crew", "Team Echo", "Team Nova", "Team Tiny Troupe", "Team Rocket", "Team Young Vibe"][index],
-    city: "Bangalore",
-    image: `assets/images/Contestent/KG/KG_CON_ (${index + 1}).jpg`,
-    categoryId: "KG",
-    bio: "",
-    buttonLabel: "",
-    buttonHref: "",
-    votes: 0,
-    isVisible: true
-  })),
-  ...Array.from({ length: 10 }, (_, index) => ({
-    id: `ks-${index + 1}`,
-    name: `Dancer ${index + 1}`,
-    city: "Bangalore",
-    image: `assets/images/Contestent/KS/KS_CON_ (${index + 1}).jpg`,
-    categoryId: "KS",
-    bio: "",
-    buttonLabel: "",
-    buttonHref: "",
-    votes: 0,
-    isVisible: true
-  })),
-  ...Array.from({ length: 10 }, (_, index) => ({
-    id: `os-${index + 1}`,
-    name: ["Dancer Alpha", "Dancer Beta", "Dancer Gamma", "Dancer Delta", "Dancer Epsilon", "Dancer Zeta", "Dancer Eta", "Dancer Theta", "Dancer Iota", "Dancer Kappa"][index],
-    city: "Bangalore",
-    image: `assets/images/Contestent/OS/OS_CON_ (${index + 1}).jpg`,
-    categoryId: "OS",
-    bio: "",
-    buttonLabel: "",
-    buttonHref: "",
-    votes: 0,
-    isVisible: true
-  }))
-];
-
 export const defaultJudges = [
   { id: "judge-a", name: "Judge A", designation: "Choreographer", image: "assets/images/judges/j1.png", bio: "", isVisible: true },
   { id: "judge-b", name: "Judge B", designation: "Performer", image: "assets/images/judges/j2.png", bio: "", isVisible: true },
@@ -173,11 +122,4 @@ export const defaultVotingContent = {
   announcement: ""
 };
 
-export const defaultSponsors = [
-  { id: "gold-1", name: "Gold Sponsor One", link: "", tier: "Gold", image: "", sortOrder: 1, visible: true },
-  { id: "gold-2", name: "Gold Sponsor Two", link: "", tier: "Gold", image: "", sortOrder: 2, visible: true },
-  { id: "gold-3", name: "Gold Sponsor Three", link: "", tier: "Gold", image: "", sortOrder: 3, visible: true },
-  { id: "silver-1", name: "Silver Sponsor One", link: "", tier: "Silver", image: "", sortOrder: 4, visible: true },
-  { id: "silver-2", name: "Silver Sponsor Two", link: "", tier: "Silver", image: "", sortOrder: 5, visible: true },
-  { id: "bronze-1", name: "Bronze Sponsor One", link: "", tier: "Bronze", image: "", sortOrder: 6, visible: true }
-];
+export const defaultSponsors = [];

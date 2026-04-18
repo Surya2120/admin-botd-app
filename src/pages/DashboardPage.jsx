@@ -9,9 +9,12 @@ import { useFirestoreSubscription } from "../hooks/useFirestoreSubscription";
 import {
   collections,
   contentDocs,
+  deleteTeam,
   deleteCollectionItem,
-  fetchCollectionItems,
+  deletePoster,
+  deleteTestimonialVideo,
   restorePreviousState,
+  saveTeam,
   saveCollectionItem,
   saveContentDoc,
   saveSettingsDoc,
@@ -19,11 +22,20 @@ import {
   settingsDocs,
   subscribeActivity,
   subscribeCollection,
+  subscribeTeams,
+  subscribeVisibleTeams,
   subscribeContentDoc,
+  subscribePosters,
   subscribeRuleVersions,
   subscribeSettingsDoc,
   subscribeSponsorLeads,
-  updateRegistrationStatus
+  subscribeVideos,
+  updateTeamFields,
+  updatePoster,
+  updateRegistrationStatus,
+  updateTestimonialVideo,
+  uploadPosterImage,
+  uploadTestimonialVideo
 } from "../services/contentService";
 import {
   defaultCategories,
@@ -31,7 +43,6 @@ import {
   defaultJudges,
   defaultRulesContent,
   defaultSeasonContent,
-  defaultSponsors,
   defaultVotingContent
 } from "../data/defaultContent";
 
@@ -68,7 +79,12 @@ const CATEGORY_META = [
   { key: "open-solo", short: "OS", label: "Open Solo" }
 ];
 
-const DEFAULT_UI_CONTROLS = { showVotes: false, showLeaderboard: true };
+const DEFAULT_UI_CONTROLS = {
+  showVotes: false,
+  showLeaderboard: true,
+  registrationOpen: true,
+  registrationClosedMessage: "AUDITIONS OPEN ON 20th APRIL",
+};
 const DEFAULT_EVENT_SIGNALS = { partyBlast: null };
 
 function normalizeCategory(value) {
@@ -90,6 +106,7 @@ function resolveCategoryLabel(value) {
 
 function rankTeams(teams = []) {
   return [...teams]
+    .filter((team) => team.approved !== false)
     .filter((team) => team.isVisible !== false)
     .sort((left, right) => {
       const voteDifference = Number(right.votes || 0) - Number(left.votes || 0);
@@ -228,8 +245,8 @@ export function DashboardPage() {
     setSnackbar({ id: Date.now(), message, tone });
   }
 
-  const contestantsState = useFirestoreSubscription(
-    (onData, onError) => subscribeCollection(collections.contestants, onData, onError),
+  const teamsState = useFirestoreSubscription(
+    (onData, onError) => subscribeVisibleTeams(onData, onError),
     []
   );
   const activityState = useFirestoreSubscription(
@@ -246,12 +263,12 @@ export function DashboardPage() {
   );
 
   useEffect(() => {
-    seedAdminContentIfNeeded(actor).catch((error) => {
-      console.error("Failed to seed admin content", error);
+    seedAdminContentIfNeeded(actor).catch(() => {
+      setSnackbar({ id: Date.now(), message: "Could not initialize admin data. Please try again.", tone: "error" });
     });
   }, [actor]);
 
-  const rankedTeams = useMemo(() => rankTeams(contestantsState.data || []), [contestantsState.data]);
+  const rankedTeams = useMemo(() => rankTeams(teamsState.data || []), [teamsState.data]);
   const totalVotes = useMemo(
     () => rankedTeams.reduce((sum, team) => sum + Number(team.votes || 0), 0),
     [rankedTeams]
@@ -260,6 +277,7 @@ export function DashboardPage() {
     () => [
       uiControlsState.data?.showVotes ? "Votes live" : "Votes hidden",
       uiControlsState.data?.showLeaderboard ? "Leaderboard live" : "Leaderboard hidden",
+      uiControlsState.data?.registrationOpen ? "Registration open" : "Registration closed",
       votingState.data?.votingOpen ? "Voting open" : "Voting closed"
     ],
     [uiControlsState.data, votingState.data]
@@ -288,16 +306,19 @@ export function DashboardPage() {
         </header>
 
         <section className="stat-grid">
-          <StatCard title="Contestants Live" value={rankedTeams.length} detail="Synced from Firestore teams" loading={contestantsState.loading} />
-          <StatCard title="Votes Recorded" value={totalVotes} detail="Realtime vote count summary" loading={contestantsState.loading} />
-          <StatCard title="Recent Changes" value={(activityState.data || []).length} detail="Activity log entries" loading={activityState.loading} />
-          <StatCard title="Vote Count Display" value={uiControlsState.data?.showVotes ? "On" : "Off"} detail="Website UI control" loading={uiControlsState.loading} />
+          <StatCard title="Teams" value={rankedTeams.length} detail="Approved and visible performers" loading={teamsState.loading} />
+          <StatCard title="Votes" value={totalVotes} detail="Total verified votes" loading={teamsState.loading} />
+          <StatCard title="Changes" value={(activityState.data || []).length} detail="Recent admin updates" loading={activityState.loading} />
+          <StatCard title="Vote Count" value={uiControlsState.data?.showVotes ? "On" : "Off"} detail="Public display setting" loading={uiControlsState.loading} />
         </section>
 
         {activeSection === "season" ? <SeasonSection actor={actor} /> : null}
         {activeSection === "categories" ? <CategoriesSection actor={actor} /> : null}
-        {activeSection === "contestants" ? <ContestantsJudgesSection actor={actor} notify={notify} /> : null}
+        {activeSection === "teams" ? <TeamsJudgesSection actor={actor} notify={notify} /> : null}
         {activeSection === "events" ? <EventsSection actor={actor} /> : null}
+        {activeSection === "posters" ? <PostersSection actor={actor} notify={notify} /> : null}
+        {activeSection === "videos" ? <VideosSection actor={actor} notify={notify} /> : null}
+        {activeSection === "registration" ? <RegistrationSection actor={actor} notify={notify} /> : null}
         {activeSection === "voting" ? <VotingSection actor={actor} notify={notify} /> : null}
         {activeSection === "sponsors" ? <SponsorsSection actor={actor} /> : null}
         {activeSection === "rules" ? <RulesSection actor={actor} /> : null}
@@ -313,6 +334,10 @@ function SeasonSection({ actor }) {
   const { data, loading, error } = useFirestoreSubscription(
     (onData, onError) => subscribeContentDoc(contentDocs.season, onData, onError),
     defaultSeasonContent
+  );
+  const seasonsState = useFirestoreSubscription(
+    (onData, onError) => subscribeCollection(collections.seasons, onData, onError),
+    []
   );
   const [draft, setDraft] = useState(defaultSeasonContent);
   const [lastSaved, setLastSaved] = useState(null);
@@ -338,6 +363,25 @@ function SeasonSection({ actor }) {
     await restorePreviousState({ ...lastSaved, actor });
   }
 
+  async function createSeasonSnapshot() {
+    const seasonName = draft.hero?.title || `Season ${Date.now()}`;
+    const snapshot = {
+      id: `season-${Date.now()}`,
+      name: seasonName,
+      title: draft.hero?.title || seasonName,
+      isActive: false,
+      content: clone(draft)
+    };
+    await saveCollectionItem(collections.seasons, snapshot, actor, `Created season snapshot ${seasonName}`, null);
+  }
+
+  async function applySeasonSnapshot(snapshot) {
+    if (!snapshot?.content) return;
+    setDraft(clone(snapshot.content));
+    await saveContentDoc(contentDocs.season, snapshot.content, actor, `Applied season snapshot ${snapshot.name}`, data);
+    setLastSaved({ type: "doc", section: contentDocs.season, targetId: contentDocs.season, previousValue: data });
+  }
+
   if (loading) return <SectionSkeleton blocks={2} />;
   if (error) return <div className="section-card form-error">{error}</div>;
 
@@ -355,6 +399,9 @@ function SeasonSection({ actor }) {
           </button>
           <button type="button" className="primary-button" onClick={handleSave} disabled={saving}>
             {saving ? "Saving..." : "Save"}
+          </button>
+          <button type="button" className="ghost-button" onClick={createSeasonSnapshot}>
+            Create Season
           </button>
         </>
       }
@@ -459,6 +506,28 @@ function SeasonSection({ actor }) {
           <p>{draft.aboutBox.content}</p>
         </PreviewPanel>
       </div>
+      <div className="snapshot-strip">
+        <div className="section-inline-head">
+          <h3>Saved Seasons</h3>
+          <span className="muted">{seasonsState.loading ? "Loading..." : `${seasonsState.data.length} saved`}</span>
+        </div>
+        <div className="snapshot-grid">
+          {seasonsState.data.length ? seasonsState.data.map((season) => (
+            <article key={season.id} className="snapshot-card">
+              <strong>{season.name || season.title || "Untitled Season"}</strong>
+              <span>{season.isActive ? "Active season" : "Saved season"}</span>
+              <div className="button-row">
+                <button type="button" className="mini-button" onClick={() => applySeasonSnapshot(season)}>
+                  Apply
+                </button>
+                <button type="button" className="danger-button" onClick={() => deleteCollectionItem(collections.seasons, season, actor)}>
+                  Delete
+                </button>
+              </div>
+            </article>
+          )) : <p className="muted">No data available.</p>}
+        </div>
+      </div>
     </SectionCard>
   );
 }
@@ -534,9 +603,9 @@ function CategoriesSection({ actor }) {
   );
 }
 
-function ContestantsJudgesSection({ actor, notify }) {
-  const contestantsState = useFirestoreSubscription(
-    (onData, onError) => subscribeCollection(collections.contestants, onData, onError),
+function TeamsJudgesSection({ actor, notify }) {
+  const teamsState = useFirestoreSubscription(
+    (onData, onError) => subscribeTeams(onData, onError),
     []
   );
   const judgesState = useFirestoreSubscription(
@@ -546,12 +615,69 @@ function ContestantsJudgesSection({ actor, notify }) {
   const [lastSaved, setLastSaved] = useState(null);
   const [query, setQuery] = useState("");
   const [visibilityFilter, setVisibilityFilter] = useState("all");
+  const [actionBusy, setActionBusy] = useState("");
   const debouncedQuery = useDebouncedValue(query);
 
-  async function saveContestant(item, previousValue) {
+  async function saveTeamItem(item, previousValue) {
     if (!promptOverwrite()) return;
-    await saveCollectionItem(collections.contestants, item, actor, `Updated contestant ${item.name}`, previousValue);
-    setLastSaved({ type: "collection", section: collections.contestants, targetId: item.id, previousValue });
+    setActionBusy(`${item.id}:save`);
+    try {
+      await saveTeam(item, actor, `Updated team ${item.name}`, previousValue);
+      setLastSaved({ type: "collection", section: collections.teams, targetId: item.id, previousValue });
+      notify?.(`${item.name || "Team"} saved.`, "success");
+    } catch (error) {
+      notify?.(error?.message || "Failed to save team.", "error");
+    } finally {
+      setActionBusy("");
+    }
+  }
+
+  async function addContestant() {
+    const category = CATEGORY_META[0];
+    const id = `team-${Date.now()}`;
+    const item = {
+      id,
+      name: "New Team",
+      city: "Bangalore",
+      categoryId: category.short,
+      image: "",
+      bio: "",
+      buttonLabel: "",
+      buttonHref: "",
+      votes: 0,
+      sortOrder: (teamsState.data || []).length + 1,
+      approved: true,
+      isVisible: true
+    };
+
+    setActionBusy("add");
+    try {
+      await saveTeam(item, actor, "Added team", null);
+      notify?.("New team added. Edit the details and save when ready.", "success");
+    } catch (error) {
+      notify?.("Could not add team. Please try again.", "error");
+    } finally {
+      setActionBusy("");
+    }
+  }
+
+  async function toggleTeamField(item, field, value) {
+    const busyKey = `${item.id}:${field}`;
+    setActionBusy(busyKey);
+    try {
+      await updateTeamFields(
+        item.id,
+        { [field]: Boolean(value) },
+        actor,
+        `${field === "approved" ? "Updated approval for" : "Updated visibility for"} ${item.name}`,
+        item
+      );
+      notify?.(`${item.name || "Team"} ${field === "approved" ? (value ? "approved" : "unapproved") : (value ? "visible" : "hidden")}.`, "success");
+    } catch (error) {
+      notify?.(error?.message || "Failed to update team.", "error");
+    } finally {
+      setActionBusy("");
+    }
   }
 
   async function saveJudge(item, previousValue) {
@@ -563,26 +689,46 @@ function ContestantsJudgesSection({ actor, notify }) {
   async function setAllTeamsVisibility(nextVisibility) {
     if (!promptOverwrite()) return;
 
-    const items = contestantsState.data || [];
-    await Promise.all(
-      items.map((item) =>
-        saveCollectionItem(
-          collections.contestants,
-          { ...item, isVisible: nextVisibility },
-          actor,
-          `${nextVisibility ? "Unhid" : "Hid"} team ${item.name}`,
-          item
+    const items = teamsState.data || [];
+    setActionBusy("bulk:visible");
+    try {
+      await Promise.all(
+        items.map((item) =>
+          updateTeamFields(
+            item.id,
+            { visible: nextVisibility },
+            actor,
+            `${nextVisibility ? "Unhid" : "Hid"} team ${item.name}`,
+            item
+          )
         )
-      )
-    );
-    notify?.(nextVisibility ? "All teams unhidden successfully." : "All teams hidden successfully.", "success");
+      );
+      notify?.(nextVisibility ? "All teams unhidden successfully." : "All teams hidden successfully.", "success");
+    } catch (error) {
+      notify?.(error?.message || "Failed to update all team visibility.", "error");
+    } finally {
+      setActionBusy("");
+    }
   }
 
-  const groupedContestants = useMemo(() => {
+  async function removeTeam(item) {
+    if (!window.confirm(`Delete ${item.name || "this team"}?`)) return;
+    setActionBusy(`${item.id}:delete`);
+    try {
+      await deleteTeam(item, actor);
+      notify?.(`${item.name || "Team"} deleted.`, "success");
+    } catch (error) {
+      notify?.(error?.message || "Failed to delete team.", "error");
+    } finally {
+      setActionBusy("");
+    }
+  }
+
+  const groupedTeams = useMemo(() => {
     const normalizedQuery = debouncedQuery.trim().toLowerCase();
     return CATEGORY_META.map((category) => ({
       ...category,
-      items: (contestantsState.data || []).filter((item) => {
+      items: (teamsState.data || []).filter((item) => {
         const matchesCategory = normalizeCategory(item.categoryId) === category.key;
         const matchesQuery = !normalizedQuery || [item.name, item.city, item.categoryId]
           .some((value) => String(value || "").toLowerCase().includes(normalizedQuery));
@@ -595,20 +741,20 @@ function ContestantsJudgesSection({ actor, notify }) {
         return matchesCategory && matchesQuery && matchesVisibility;
       })
     }));
-  }, [contestantsState.data, debouncedQuery, visibilityFilter]);
+  }, [teamsState.data, debouncedQuery, visibilityFilter]);
 
   const allTeamsVisible = useMemo(
-    () => (contestantsState.data || []).length > 0 && (contestantsState.data || []).every((item) => item.isVisible !== false),
-    [contestantsState.data]
+    () => (teamsState.data || []).length > 0 && (teamsState.data || []).every((item) => item.isVisible !== false),
+    [teamsState.data]
   );
 
-  if (contestantsState.loading || judgesState.loading) return <SectionSkeleton blocks={4} />;
-  if (contestantsState.error || judgesState.error) return <div className="section-card form-error">{contestantsState.error || judgesState.error}</div>;
+  if (teamsState.loading || judgesState.loading) return <SectionSkeleton blocks={4} />;
+  if (teamsState.error || judgesState.error) return <div className="section-card form-error">{teamsState.error || judgesState.error}</div>;
 
   return (
     <div className="stack-lg">
       <SectionCard
-        title="Contestants Control"
+        title="Teams Control"
         subtitle="Edit every contestant individually, grouped by category for faster scanning."
         actions={
           <>
@@ -616,8 +762,8 @@ function ContestantsJudgesSection({ actor, notify }) {
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search contestants..."
-                aria-label="Search contestants"
+                placeholder="Search teams..."
+                aria-label="Search teams"
               />
               <select value={visibilityFilter} onChange={(event) => setVisibilityFilter(event.target.value)} aria-label="Filter team visibility">
                 <option value="all">All Teams</option>
@@ -629,22 +775,25 @@ function ContestantsJudgesSection({ actor, notify }) {
               type="button"
               className="ghost-button"
               onClick={() => setAllTeamsVisibility(!allTeamsVisible)}
-              disabled={!(contestantsState.data || []).length}
+              disabled={!(teamsState.data || []).length || actionBusy === "bulk:visible"}
             >
-              {allTeamsVisible ? "Hide All Teams" : "Unhide All Teams"}
+              {actionBusy === "bulk:visible" ? "Updating..." : allTeamsVisible ? "Hide All Teams" : "Unhide All Teams"}
             </button>
             <button type="button" className="ghost-button" disabled={!lastSaved} onClick={() => lastSaved && restorePreviousState({ ...lastSaved, actor })}>
               Undo Last Change
+            </button>
+            <button type="button" className="primary-button" onClick={addContestant} disabled={actionBusy === "add"}>
+              {actionBusy === "add" ? "Adding..." : "Add Contestant"}
             </button>
           </>
         }
       >
         <div className="stack-lg">
-          {groupedContestants.map((group) => (
+          {groupedTeams.map((group) => (
             <div key={group.key} className="stack-md">
               <div className="section-inline-head">
                 <h3>{group.label}</h3>
-                <span className="muted">{group.items.length} contestants</span>
+                <span className="muted">{group.items.length} teams</span>
               </div>
               <div className="collection-grid">
                 {group.items.map((item) => (
@@ -662,9 +811,26 @@ function ContestantsJudgesSection({ actor, notify }) {
                       { key: "buttonHref", label: "Button Link" },
                       { key: "votes", label: "Votes", type: "number" }
                     ]}
-                    toggleField="isVisible"
-                    toggleLabel="Show team on website"
-                    onSave={saveContestant}
+                    liveToggles={[
+                      {
+                        key: "approved",
+                        label: "Approved",
+                        checked: item.approved !== false,
+                        disabled: actionBusy === `${item.id}:approved`,
+                        onChange: (value) => toggleTeamField(item, "approved", value)
+                      },
+                      {
+                        key: "visible",
+                        label: "Show team on website",
+                        checked: item.isVisible !== false,
+                        disabled: actionBusy === `${item.id}:visible`,
+                        onChange: (value) => toggleTeamField(item, "visible", value)
+                      }
+                    ]}
+                    onSave={saveTeamItem}
+                    onDelete={removeTeam}
+                    saving={actionBusy === `${item.id}:save`}
+                    deleting={actionBusy === `${item.id}:delete`}
                   />
                 ))}
               </div>
@@ -863,6 +1029,439 @@ function EventsSection({ actor }) {
   );
 }
 
+function PostersSection({ actor, notify }) {
+  const { data, loading, error } = useFirestoreSubscription(
+    (onData, onError) => subscribePosters(onData, onError),
+    []
+  );
+  const [posterFiles, setPosterFiles] = useState([]);
+  const [posterOrder, setPosterOrder] = useState(1);
+  const [posterActive, setPosterActive] = useState(true);
+  const [busyId, setBusyId] = useState("");
+  const posters = data || [];
+
+  useEffect(() => {
+    const nextOrder = posters.length
+      ? Math.max(...posters.map((item) => Number(item.order || 0))) + 1
+      : 1;
+    setPosterOrder(nextOrder);
+  }, [posters]);
+
+  async function handleUpload(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+
+    if (!posterFiles.length) {
+      notify?.("Choose one or more poster images before uploading.", "error");
+      return;
+    }
+
+    setBusyId("upload");
+    try {
+      await Promise.all(
+        posterFiles.map((file, index) =>
+          uploadPosterImage(file, {
+            actor,
+            order: Number(posterOrder || 1) + index,
+            isActive: posterActive
+          })
+        )
+      );
+      setPosterFiles([]);
+      form.reset();
+      notify?.(`${posterFiles.length} poster${posterFiles.length > 1 ? "s" : ""} uploaded successfully.`, "success");
+    } catch (uploadError) {
+      notify?.(uploadError.message || "Poster upload failed.", "error");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function handlePosterUpdate(item, partial) {
+    setBusyId(item.id);
+    try {
+      await updatePoster({ ...item, ...partial }, actor, item);
+      notify?.("Poster updated.", "success");
+    } catch (updateError) {
+      notify?.(updateError.message || "Poster update failed.", "error");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function handleDelete(item) {
+    if (!window.confirm("Delete this poster?")) {
+      return;
+    }
+
+    setBusyId(item.id);
+    try {
+      await deletePoster(item, actor);
+      notify?.("Poster deleted.", "success");
+    } catch (deleteError) {
+      notify?.(deleteError.message || "Poster delete failed.", "error");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  if (loading) return <SectionSkeleton blocks={2} />;
+  if (error) return <div className="section-card form-error">{error}</div>;
+
+  return (
+    <div className="stack-lg">
+      <SectionCard
+        title="Event Poster Management"
+        subtitle="Upload one or many posters and arrange the Events page vertical slider."
+      >
+        <form className="poster-upload-card" onSubmit={handleUpload}>
+          <FormField label="Poster Images">
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(event) => setPosterFiles(Array.from(event.target.files || []))}
+            />
+          </FormField>
+          <FormField label="Display Order">
+            <input
+              type="number"
+              min="1"
+              value={posterOrder}
+              onChange={(event) => setPosterOrder(Number(event.target.value || 1))}
+            />
+          </FormField>
+          <label className="checkbox-field">
+            <input
+              type="checkbox"
+              checked={posterActive}
+              onChange={(event) => setPosterActive(event.target.checked)}
+            />
+            <span>Active on website</span>
+          </label>
+          <button type="submit" className="primary-button" disabled={busyId === "upload"}>
+            {busyId === "upload" ? "Uploading..." : posterFiles.length > 1 ? `Upload ${posterFiles.length} Posters` : "Upload Poster"}
+          </button>
+          {posterFiles.length ? (
+            <p className="muted poster-upload-summary">
+              Selected: {posterFiles.map((file) => file.name).join(", ")}
+            </p>
+          ) : null}
+        </form>
+      </SectionCard>
+
+      <SectionCard
+        title="Live Posters"
+        subtitle="Upload, hide, show, and reorder event posters."
+      >
+        <div className="poster-admin-grid">
+          {posters.length ? posters.map((item) => (
+            <article key={item.id} className="poster-admin-card">
+              <img src={item.imageUrl} alt="BOTD event poster" loading="lazy" />
+              <div className="poster-admin-body">
+                <div>
+                  <strong>{item.originalName || item.id}</strong>
+                  <p className="muted">{item.isActive !== false ? "Active" : "Hidden"} · Order {Number(item.order || 0)}</p>
+                </div>
+                <FormField label="Order">
+                  <input
+                    type="number"
+                    min="1"
+                    defaultValue={Number(item.order || 0)}
+                    onBlur={(event) => {
+                      const nextOrder = Number(event.target.value || 0);
+                      if (nextOrder !== Number(item.order || 0)) {
+                        handlePosterUpdate(item, { order: nextOrder });
+                      }
+                    }}
+                  />
+                </FormField>
+                <div className="button-row">
+                  <button
+                    type="button"
+                    className={`switch ${item.isActive !== false ? "is-on" : ""}`}
+                    onClick={() => handlePosterUpdate(item, { isActive: item.isActive === false })}
+                    disabled={busyId === item.id}
+                    aria-pressed={item.isActive !== false}
+                    title="Toggle poster visibility"
+                  >
+                    <span className="switch-thumb" />
+                  </button>
+                  <span className="muted">{item.isActive !== false ? "Visible" : "Hidden"}</span>
+                </div>
+                <div className="button-row">
+                  <a className="ghost-button" href={item.imageUrl} target="_blank" rel="noreferrer">
+                    View
+                  </a>
+                  <button
+                    type="button"
+                    className="danger-button"
+                    onClick={() => handleDelete(item)}
+                    disabled={busyId === item.id}
+                  >
+                    {busyId === item.id ? "Working..." : "Delete"}
+                  </button>
+                </div>
+              </div>
+            </article>
+          )) : (
+            <p className="muted">No data available.</p>
+          )}
+        </div>
+      </SectionCard>
+    </div>
+  );
+}
+
+function VideosSection({ actor, notify }) {
+  const { data, loading, error } = useFirestoreSubscription(
+    (onData, onError) => subscribeVideos(onData, onError),
+    []
+  );
+  const [videoFiles, setVideoFiles] = useState([]);
+  const [videoOrder, setVideoOrder] = useState(1);
+  const [videoActive, setVideoActive] = useState(true);
+  const [busyId, setBusyId] = useState("");
+  const videos = data || [];
+
+  useEffect(() => {
+    const nextOrder = videos.length
+      ? Math.max(...videos.map((item) => Number(item.order || 0))) + 1
+      : 1;
+    setVideoOrder(nextOrder);
+  }, [videos]);
+
+  async function handleUpload(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+
+    if (!videoFiles.length) {
+      notify?.("Choose one or more testimonial videos before uploading.", "error");
+      return;
+    }
+
+    setBusyId("upload");
+    try {
+      await Promise.all(
+        videoFiles.map((file, index) =>
+          uploadTestimonialVideo(file, {
+            actor,
+            order: Number(videoOrder || 1) + index,
+            isActive: videoActive
+          })
+        )
+      );
+      setVideoFiles([]);
+      form.reset();
+      notify?.(`${videoFiles.length} video${videoFiles.length > 1 ? "s" : ""} uploaded successfully.`, "success");
+    } catch (uploadError) {
+      notify?.(uploadError.message || "Video upload failed.", "error");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function handleVideoUpdate(item, partial) {
+    setBusyId(item.id);
+    try {
+      await updateTestimonialVideo({ ...item, ...partial }, actor, item);
+      notify?.("Video updated.", "success");
+    } catch (updateError) {
+      notify?.(updateError.message || "Video update failed.", "error");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function handleDelete(item) {
+    if (!window.confirm("Delete this testimonial video?")) {
+      return;
+    }
+
+    setBusyId(item.id);
+    try {
+      await deleteTestimonialVideo(item, actor);
+      notify?.("Video deleted.", "success");
+    } catch (deleteError) {
+      notify?.(deleteError.message || "Video delete failed.", "error");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  if (loading) return <SectionSkeleton blocks={2} />;
+  if (error) return <div className="section-card form-error">{error}</div>;
+
+  return (
+    <div className="stack-lg">
+      <SectionCard
+        title="Manage Testimonials Videos"
+        subtitle="Upload and arrange videos shown in the About page testimonial slider."
+      >
+        <form className="poster-upload-card" onSubmit={handleUpload}>
+          <FormField label="Testimonial Videos">
+            <input
+              type="file"
+              accept="video/mp4,video/*"
+              multiple
+              onChange={(event) => setVideoFiles(Array.from(event.target.files || []))}
+            />
+          </FormField>
+          <FormField label="Display Order">
+            <input
+              type="number"
+              min="1"
+              value={videoOrder}
+              onChange={(event) => setVideoOrder(Number(event.target.value || 1))}
+            />
+          </FormField>
+          <label className="checkbox-field">
+            <input
+              type="checkbox"
+              checked={videoActive}
+              onChange={(event) => setVideoActive(event.target.checked)}
+            />
+            <span>Active on website</span>
+          </label>
+          <button type="submit" className="primary-button" disabled={busyId === "upload"}>
+            {busyId === "upload" ? "Uploading..." : videoFiles.length > 1 ? `Upload ${videoFiles.length} Videos` : "Upload Video"}
+          </button>
+          {videoFiles.length ? (
+            <p className="muted poster-upload-summary">
+              Selected: {videoFiles.map((file) => file.name).join(", ")}
+            </p>
+          ) : null}
+        </form>
+      </SectionCard>
+
+      <SectionCard
+        title="Live Testimonial Videos"
+        subtitle="Upload, hide, show, and reorder testimonial videos."
+      >
+        <div className="poster-admin-grid">
+          {videos.length ? videos.map((item) => (
+            <article key={item.id} className="poster-admin-card video-admin-card">
+              <video src={item.videoUrl} controls preload="metadata" />
+              <div className="poster-admin-body">
+                <div>
+                  <strong>{item.originalName || item.id}</strong>
+                  <p className="muted">{item.isActive !== false ? "Active" : "Hidden"} · Order {Number(item.order || 0)}</p>
+                </div>
+                <FormField label="Order">
+                  <input
+                    type="number"
+                    min="1"
+                    defaultValue={Number(item.order || 0)}
+                    onBlur={(event) => {
+                      const nextOrder = Number(event.target.value || 0);
+                      if (nextOrder !== Number(item.order || 0)) {
+                        handleVideoUpdate(item, { order: nextOrder });
+                      }
+                    }}
+                  />
+                </FormField>
+                <div className="button-row">
+                  <button
+                    type="button"
+                    className={`switch ${item.isActive !== false ? "is-on" : ""}`}
+                    onClick={() => handleVideoUpdate(item, { isActive: item.isActive === false })}
+                    disabled={busyId === item.id}
+                    aria-pressed={item.isActive !== false}
+                    title="Toggle video visibility"
+                  >
+                    <span className="switch-thumb" />
+                  </button>
+                  <span className="muted">{item.isActive !== false ? "Visible" : "Hidden"}</span>
+                </div>
+                <div className="button-row">
+                  <a className="ghost-button" href={item.videoUrl} target="_blank" rel="noreferrer">
+                    View
+                  </a>
+                  <button
+                    type="button"
+                    className="danger-button"
+                    onClick={() => handleDelete(item)}
+                    disabled={busyId === item.id}
+                  >
+                    {busyId === item.id ? "Working..." : "Delete"}
+                  </button>
+                </div>
+              </div>
+            </article>
+          )) : (
+            <p className="muted">No data available.</p>
+          )}
+        </div>
+      </SectionCard>
+    </div>
+  );
+}
+
+function RegistrationSection({ actor, notify }) {
+  const uiControlsState = useFirestoreSubscription(
+    (onData, onError) => subscribeSettingsDoc(settingsDocs.uiControls, DEFAULT_UI_CONTROLS, onData, onError),
+    DEFAULT_UI_CONTROLS
+  );
+  const [controlSaving, setControlSaving] = useState("");
+
+  async function updateRegistrationPortal(registrationOpen) {
+    if (!window.confirm(`Are you sure you want to ${registrationOpen ? "open" : "close"} the registration portal on the live website?`)) {
+      return;
+    }
+
+    setControlSaving("registrationOpen");
+    try {
+      await saveSettingsDoc(
+        settingsDocs.uiControls,
+        { ...uiControlsState.data, registrationOpen },
+        actor,
+        `Updated registrationOpen`,
+        uiControlsState.data
+      );
+      notify?.(`Registration portal ${registrationOpen ? "opened" : "closed"}.`, "success");
+    } finally {
+      setControlSaving("");
+    }
+  }
+
+  if (uiControlsState.loading) {
+    return <SectionSkeleton blocks={2} />;
+  }
+
+  if (uiControlsState.error) {
+    return <div className="section-card form-error">{uiControlsState.error}</div>;
+  }
+
+  return (
+    <SectionCard
+      title="Registration Controls"
+      subtitle="Open or close the public registration portal independently from voting controls."
+    >
+      <div className="grid-two">
+        <div className="stack-lg">
+          <RealtimeControlCard
+            label="Registration Portal"
+            description="Enable or disable the public registration form instantly."
+            checked={Boolean(uiControlsState.data?.registrationOpen)}
+            loading={controlSaving === "registrationOpen"}
+            onChange={updateRegistrationPortal}
+          />
+        </div>
+        <PreviewPanel title="Registration Status Preview">
+          <div className={`status-chip ${uiControlsState.data?.registrationOpen ? "is-open" : "is-closed"}`}>
+            {uiControlsState.data?.registrationOpen ? "Registration Open" : "Registration Closed"}
+          </div>
+          <p>
+            {uiControlsState.data?.registrationOpen
+              ? "The website registration form is enabled for participants."
+              : (uiControlsState.data?.registrationClosedMessage || "AUDITIONS OPEN ON 20th APRIL")}
+          </p>
+        </PreviewPanel>
+      </div>
+    </SectionCard>
+  );
+}
+
 function VotingSection({ actor, notify }) {
   const votingDocState = useFirestoreSubscription(
     (onData, onError) => subscribeContentDoc(contentDocs.voting, onData, onError),
@@ -876,8 +1475,8 @@ function VotingSection({ actor, notify }) {
     (onData, onError) => subscribeSettingsDoc(settingsDocs.events, DEFAULT_EVENT_SIGNALS, onData, onError),
     DEFAULT_EVENT_SIGNALS
   );
-  const contestantsState = useFirestoreSubscription(
-    (onData, onError) => subscribeCollection(collections.contestants, onData, onError),
+  const teamsState = useFirestoreSubscription(
+    (onData, onError) => subscribeVisibleTeams(onData, onError),
     []
   );
   const [draft, setDraft] = useState(defaultVotingContent);
@@ -890,8 +1489,8 @@ function VotingSection({ actor, notify }) {
     if (votingDocState.data) setDraft(clone(votingDocState.data));
   }, [votingDocState.data]);
 
-  const rankedTeams = useMemo(() => rankTeams(contestantsState.data || []), [contestantsState.data]);
-  const leaderboardColumns = useMemo(() => buildLeaderboardColumns(contestantsState.data || []), [contestantsState.data]);
+  const rankedTeams = useMemo(() => rankTeams(teamsState.data || []), [teamsState.data]);
+  const leaderboardColumns = useMemo(() => buildLeaderboardColumns(teamsState.data || []), [teamsState.data]);
   const leaderboardRows = useMemo(() => {
     const rowCount = Math.max(...leaderboardColumns.map((column) => column.items.length), 0);
     return Array.from({ length: rowCount }, (_, index) => ({
@@ -913,7 +1512,12 @@ function VotingSection({ actor, notify }) {
   }
 
   async function toggleUiControl(key, value) {
-    const label = key === "showVotes" ? "vote counts" : "leaderboard";
+    const labelMap = {
+      showVotes: "vote counts",
+      showLeaderboard: "leaderboard",
+      registrationOpen: "registration portal",
+    };
+    const label = labelMap[key] || "website setting";
     if (!window.confirm(`Are you sure you want to ${value ? "show" : "hide"} ${label} on the live website?`)) {
       return;
     }
@@ -951,12 +1555,12 @@ function VotingSection({ actor, notify }) {
     }
   }
 
-  if (votingDocState.loading || uiControlsState.loading || contestantsState.loading || eventSignalsState.loading) {
+  if (votingDocState.loading || uiControlsState.loading || teamsState.loading || eventSignalsState.loading) {
     return <SectionSkeleton blocks={4} />;
   }
 
-  if (votingDocState.error || uiControlsState.error || contestantsState.error || eventSignalsState.error) {
-    return <div className="section-card form-error">{votingDocState.error || uiControlsState.error || contestantsState.error || eventSignalsState.error}</div>;
+  if (votingDocState.error || uiControlsState.error || teamsState.error || eventSignalsState.error) {
+    return <div className="section-card form-error">{votingDocState.error || uiControlsState.error || teamsState.error || eventSignalsState.error}</div>;
   }
 
   return (
@@ -996,7 +1600,7 @@ function VotingSection({ actor, notify }) {
                 onChange={(value) => toggleUiControl("showLeaderboard", value)}
               />
               <button type="button" className={`celebration-button ${partyBusy ? "is-firing" : ""}`} onClick={handlePartyBlast} disabled={partyBusy}>
-                {partyBusy ? "Celebration Triggered" : "Trigger Celebration 🎉"}
+                {partyBusy ? "Celebration Triggered" : "Trigger Celebration"}
               </button>
             </div>
 
@@ -1042,9 +1646,9 @@ function VotingSection({ actor, notify }) {
         </div>
       </SectionCard>
 
-      <SectionCard title="Votes Management" subtitle="Live rankings from the teams collection, sorted by vote count and highlighted for the top 3.">
+      <SectionCard title="Votes Management" subtitle="Live rankings sorted by vote count and highlighted for the top 3.">
         <div className="votes-board">
-          {rankedTeams.map((team) => (
+          {rankedTeams.length ? rankedTeams.map((team) => (
             <article key={team.id} className={`vote-rank-card ${team.rank <= 3 ? `is-top-${team.rank}` : ""}`}>
               <div className="vote-rank-badge">#{team.rank}</div>
               <div className="vote-rank-copy">
@@ -1053,59 +1657,65 @@ function VotingSection({ actor, notify }) {
               </div>
               <div className="vote-rank-count">{Number(team.votes || 0)}</div>
             </article>
-          ))}
+          )) : <p className="muted">No data available.</p>}
         </div>
       </SectionCard>
 
-      <SectionCard title="Leaderboard Preview" subtitle="Matches the website’s grouped leaderboard layout with realtime category rankings.">
-        <div className="leaderboard-preview-grid">
-          {leaderboardColumns.map((column) => (
-            <div key={column.key} className="leaderboard-preview-column">
-              <div className="leaderboard-preview-head">{column.label}</div>
-              <div className="stack-sm">
-                {column.items.slice(0, 5).map((item) => (
-                  <div key={item.id} className={`leaderboard-preview-card ${item.rank <= 3 ? "is-featured" : ""}`}>
-                    <span className="leaderboard-preview-rank">#{item.rank}</span>
-                    <strong>{item.name}</strong>
-                    <small>{Number(item.votes || 0)} votes</small>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="leaderboard-matrix-wrap">
-          <div className="leaderboard-matrix">
-            <div className="leaderboard-matrix-header">
-              <div className="leaderboard-matrix-rank">Rank</div>
+      <SectionCard title="Leaderboard Preview" subtitle="Grouped category rankings shown on the website.">
+        {rankedTeams.length ? (
+          <>
+            <div className="leaderboard-preview-grid">
               {leaderboardColumns.map((column) => (
-                <div key={column.key} className="leaderboard-matrix-cell head">
-                  {column.label}
+                <div key={column.key} className="leaderboard-preview-column">
+                  <div className="leaderboard-preview-head">{column.label}</div>
+                  <div className="stack-sm">
+                    {column.items.slice(0, 5).map((item) => (
+                      <div key={item.id} className={`leaderboard-preview-card ${item.rank <= 3 ? "is-featured" : ""}`}>
+                        <span className="leaderboard-preview-rank">#{item.rank}</span>
+                        <strong>{item.name}</strong>
+                        <small>{Number(item.votes || 0)} votes</small>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
-            {leaderboardRows.map((row) => (
-              <div key={row.rank} className={`leaderboard-matrix-row ${row.rank <= 3 ? "is-top-row" : ""}`}>
-                <div className="leaderboard-matrix-rank">
-                  <span>#{row.rank}</span>
+
+            <div className="leaderboard-matrix-wrap">
+              <div className="leaderboard-matrix">
+                <div className="leaderboard-matrix-header">
+                  <div className="leaderboard-matrix-rank">Rank</div>
+                  {leaderboardColumns.map((column) => (
+                    <div key={column.key} className="leaderboard-matrix-cell head">
+                      {column.label}
+                    </div>
+                  ))}
                 </div>
-                {row.items.map((item, index) => (
-                  <div key={`${row.rank}-${leaderboardColumns[index].key}`} className={`leaderboard-matrix-cell ${item ? "" : "is-empty"}`}>
-                    {item ? (
-                      <>
-                        <strong>{item.name}</strong>
-                        <small>{Number(item.votes || 0)} votes</small>
-                      </>
-                    ) : (
-                      <span>-</span>
-                    )}
+                {leaderboardRows.map((row) => (
+                  <div key={row.rank} className={`leaderboard-matrix-row ${row.rank <= 3 ? "is-top-row" : ""}`}>
+                    <div className="leaderboard-matrix-rank">
+                      <span>#{row.rank}</span>
+                    </div>
+                    {row.items.map((item, index) => (
+                      <div key={`${row.rank}-${leaderboardColumns[index].key}`} className={`leaderboard-matrix-cell ${item ? "" : "is-empty"}`}>
+                        {item ? (
+                          <>
+                            <strong>{item.name}</strong>
+                            <small>{Number(item.votes || 0)} votes</small>
+                          </>
+                        ) : (
+                          <span>-</span>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
+          </>
+        ) : (
+          <p className="muted">No data available.</p>
+        )}
       </SectionCard>
     </div>
   );
@@ -1114,18 +1724,34 @@ function VotingSection({ actor, notify }) {
 function SponsorsSection({ actor }) {
   const { data, loading, error } = useFirestoreSubscription(
     (onData, onError) => subscribeCollection(collections.sponsors, onData, onError),
-    defaultSponsors
+    []
   );
   const [lastSaved, setLastSaved] = useState(null);
 
   const sponsorItems = useMemo(
-    () => (data || []).filter((item) => item.recordType !== "lead"),
+    () => (data || [])
+      .filter((item) => item.recordType !== "lead")
+      .map((item, index) => ({
+        id: item.id,
+        name: item.name || "",
+        logo: item.logo || item.image || "",
+        isVisible: item.isVisible ?? item.visible ?? true,
+        order: Number(item.order ?? item.sortOrder ?? index + 1)
+      }))
+      .sort((left, right) => Number(left.order || 0) - Number(right.order || 0)),
     [data]
   );
 
   async function saveItem(item, previousValue) {
     if (!promptOverwrite()) return;
-    await saveCollectionItem(collections.sponsors, item, actor, `Updated sponsor ${item.name}`, previousValue);
+    const nextItem = {
+      id: item.id,
+      name: item.name || "Untitled Sponsor",
+      logo: item.logo || "",
+      isVisible: item.isVisible !== false,
+      order: Number(item.order || 0)
+    };
+    await saveCollectionItem(collections.sponsors, nextItem, actor, `Updated sponsor ${nextItem.name}`, previousValue);
     setLastSaved({ type: "collection", section: collections.sponsors, targetId: item.id, previousValue });
   }
 
@@ -1133,11 +1759,9 @@ function SponsorsSection({ actor }) {
     const item = {
       id: `sponsor-${Date.now()}`,
       name: "New Sponsor",
-      link: "",
-      tier: "Silver",
-      image: "",
-      sortOrder: sponsorItems.length + 1,
-      visible: true
+      logo: "",
+      isVisible: true,
+      order: sponsorItems.length + 1
     };
     await saveCollectionItem(collections.sponsors, item, actor, "Added sponsor", null);
   }
@@ -1157,10 +1781,37 @@ function SponsorsSection({ actor }) {
       next.map((entry, position) =>
         saveCollectionItem(
           collections.sponsors,
-          { ...entry, sortOrder: position + 1 },
+          {
+            id: entry.id,
+            name: entry.name || "Untitled Sponsor",
+            logo: entry.logo || "",
+            isVisible: entry.isVisible !== false,
+            order: position + 1
+          },
           actor,
           `Reordered sponsor ${entry.name}`,
           sponsorItems.find((itemData) => itemData.id === entry.id)
+        )
+      )
+    );
+  }
+
+  async function setAllVisibility(isVisible) {
+    if (!window.confirm(`${isVisible ? "Unhide" : "Hide"} all sponsors?`)) return;
+    await Promise.all(
+      sponsorItems.map((item) =>
+        saveCollectionItem(
+          collections.sponsors,
+          {
+            id: item.id,
+            name: item.name || "Untitled Sponsor",
+            logo: item.logo || "",
+            isVisible,
+            order: Number(item.order || 0)
+          },
+          actor,
+          `${isVisible ? "Unhid" : "Hid"} sponsor ${item.name}`,
+          item
         )
       )
     );
@@ -1171,12 +1822,18 @@ function SponsorsSection({ actor }) {
 
   return (
     <SectionCard
-      title="Sponsors Page Control"
-      subtitle="Manage sponsor logos, names, links, tiers, visibility, and ordering."
+      title="Sponsors Management"
+      subtitle="Add, hide, show, delete, and reorder sponsor logos on the website."
       actions={
         <>
           <button type="button" className="ghost-button" disabled={!lastSaved} onClick={() => lastSaved && restorePreviousState({ ...lastSaved, actor })}>
             Undo Last Change
+          </button>
+          <button type="button" className="ghost-button" onClick={() => setAllVisibility(false)} disabled={!sponsorItems.length}>
+            Hide All
+          </button>
+          <button type="button" className="ghost-button" onClick={() => setAllVisibility(true)} disabled={!sponsorItems.length}>
+            Unhide All
           </button>
           <button type="button" className="primary-button" onClick={addSponsor}>
             Add Sponsor
@@ -1185,34 +1842,47 @@ function SponsorsSection({ actor }) {
       }
     >
       <div className="stack-lg">
-        {sponsorItems.map((item) => (
-          <EditableCollectionCard
-            key={item.id}
-            title={item.name}
-            item={item}
-            fields={[
-              { key: "name", label: "Sponsor Name" },
-              { key: "tier", label: "Tier" },
-              { key: "link", label: "Website Link" },
-              { key: "image", label: "Logo URL / Path" },
-              { key: "sortOrder", label: "Sort Order", type: "number" }
-            ]}
-            toggleField="visible"
-            toggleLabel="Visible on sponsors page"
-            onSave={saveItem}
-            onDelete={removeSponsor}
-            extraActions={
-              <>
-                <button type="button" className="mini-button" onClick={() => reorder(item, -1)}>
-                  Up
-                </button>
-                <button type="button" className="mini-button" onClick={() => reorder(item, 1)}>
-                  Down
-                </button>
-              </>
-            }
-          />
-        ))}
+        <div className="admin-sponsor-summary">
+          <span>Total: {sponsorItems.length}</span>
+          <span>Visible: {sponsorItems.filter((item) => item.isVisible !== false).length}</span>
+          <span>Hidden: {sponsorItems.filter((item) => item.isVisible === false).length}</span>
+        </div>
+
+        {sponsorItems.length ? sponsorItems.map((item) => (
+          <div key={item.id} className="admin-sponsor-card">
+            <div className="admin-sponsor-preview">
+              {item.logo ? <img src={item.logo} alt={`${item.name} logo`} /> : <span>{String(item.name || "SP").slice(0, 2).toUpperCase()}</span>}
+            </div>
+            <EditableCollectionCard
+              title={`${item.name || "Untitled Sponsor"} - ${item.isVisible !== false ? "Visible" : "Hidden"} - Order ${item.order || 0}`}
+              item={item}
+              fields={[
+                { key: "name", label: "Sponsor Name" },
+                { key: "logo", label: "Logo Image URL" },
+                { key: "order", label: "Order", type: "number" }
+              ]}
+              toggleField="isVisible"
+              toggleLabel="Visible on sponsors page"
+              onSave={saveItem}
+              onDelete={removeSponsor}
+              extraActions={
+                <>
+                  <button type="button" className="mini-button" onClick={() => saveItem({ ...item, isVisible: item.isVisible === false }, item)}>
+                    {item.isVisible !== false ? "Hide" : "Unhide"}
+                  </button>
+                  <button type="button" className="mini-button" onClick={() => reorder(item, -1)}>
+                    Up
+                  </button>
+                  <button type="button" className="mini-button" onClick={() => reorder(item, 1)}>
+                    Down
+                  </button>
+                </>
+              }
+            />
+          </div>
+        )) : (
+          <p className="muted">No data available.</p>
+        )}
       </div>
     </SectionCard>
   );
@@ -1303,72 +1973,27 @@ function RulesSection({ actor }) {
 function DataHubSection({ notify }) {
   const { user } = useAuth();
   const actor = user?.email || "admin";
-  const [registrations, setRegistrations] = useState([]);
-  const [contacts, setContacts] = useState([]);
-  const [sponsorLeads, setSponsorLeads] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const registrationsState = useFirestoreSubscription(
+    (onData, onError) => subscribeCollection(collections.registrations, onData, onError),
+    []
+  );
+  const contactsState = useFirestoreSubscription(
+    (onData, onError) => subscribeCollection(collections.contacts, onData, onError),
+    []
+  );
+  const sponsorLeadsState = useFirestoreSubscription(
+    (onData, onError) => subscribeSponsorLeads(onData, onError),
+    []
+  );
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [refreshTick, setRefreshTick] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
   const [statusBusy, setStatusBusy] = useState("");
   const debouncedQuery = useDebouncedValue(query);
-
-  useEffect(() => {
-    let active = true;
-
-    async function loadData() {
-      setLoading(true);
-      setError("");
-      try {
-        const [nextRegistrations, nextContacts, nextSponsorLeads] = await Promise.all([
-          fetchCollectionItems(collections.registrations, {
-            orderBy: { field: "createdAt", direction: "desc" },
-            limit: 250,
-          }),
-          fetchCollectionItems(collections.contacts, {
-            orderBy: { field: "createdAt", direction: "desc" },
-            limit: 150,
-          }),
-          fetchCollectionItems(collections.sponsors, {
-            where: { field: "recordType", operator: "==", value: "lead" },
-            limit: 150,
-          }),
-        ]);
-
-        if (!active) {
-          return;
-        }
-
-        setRegistrations(nextRegistrations);
-        setContacts(nextContacts);
-        setSponsorLeads(
-          [...nextSponsorLeads].sort((left, right) => {
-            const leftSeconds = left?.createdAt?.seconds || 0;
-            const rightSeconds = right?.createdAt?.seconds || 0;
-            return rightSeconds - leftSeconds;
-          })
-        );
-      } catch (loadError) {
-        console.error("Failed to load data hub", loadError);
-        if (active) {
-          setError(loadError.message || "Failed to load submission data.");
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-          setRefreshing(false);
-        }
-      }
-    }
-
-    loadData();
-
-    return () => {
-      active = false;
-    };
-  }, [refreshTick]);
+  const registrations = registrationsState.data || [];
+  const contacts = contactsState.data || [];
+  const sponsorLeads = sponsorLeadsState.data || [];
+  const loading = registrationsState.loading || contactsState.loading || sponsorLeadsState.loading;
+  const error = registrationsState.error || contactsState.error || sponsorLeadsState.error;
 
   const filteredRegistrations = useMemo(() => {
     const normalizedQuery = debouncedQuery.trim().toLowerCase();
@@ -1398,11 +2023,7 @@ function DataHubSection({ notify }) {
     setStatusBusy(busyKey);
     try {
       await updateRegistrationStatus(item.id, status, actor);
-      setRegistrations((current) =>
-        current.map((row) => (row.id === item.id ? { ...row, status } : row))
-      );
     } catch (statusError) {
-      console.error("Failed to update registration status", statusError);
       notify?.(statusError.message || "Failed to update status.", "error");
       return;
     } finally {
@@ -1444,17 +2065,6 @@ function DataHubSection({ notify }) {
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
             </select>
-            <button
-              type="button"
-              className="toolbar-button"
-              onClick={() => {
-                setRefreshing(true);
-                setRefreshTick((current) => current + 1);
-                notify?.("Refreshing Data Hub...", "info");
-              }}
-            >
-              {refreshing ? "Refreshing..." : "Refresh"}
-            </button>
           </div>
         }
       >
@@ -1474,6 +2084,7 @@ function DataHubSection({ notify }) {
                 {group.items.map((item) => {
                   const assets = getRegistrationAssets(item);
                   const status = normalizeRegistrationStatus(item.status || item.submissionStatus);
+                  const isStatusBusy = statusBusy.startsWith(`${item.id}:`);
 
                   return (
                     <div key={item.id} className="registration-entry-card">
@@ -1522,7 +2133,7 @@ function DataHubSection({ notify }) {
                         <button
                           type="button"
                           className="primary-button"
-                          disabled={statusBusy === `${item.id}:approved`}
+                          disabled={isStatusBusy}
                           onClick={() => handleStatusChange(item, "approved")}
                         >
                           {statusBusy === `${item.id}:approved` ? "Approving..." : "Approve"}
@@ -1530,7 +2141,7 @@ function DataHubSection({ notify }) {
                         <button
                           type="button"
                           className="danger-button"
-                          disabled={statusBusy === `${item.id}:rejected`}
+                          disabled={isStatusBusy}
                           onClick={() => handleStatusChange(item, "rejected")}
                         >
                           {statusBusy === `${item.id}:rejected` ? "Rejecting..." : "Reject"}
@@ -1549,7 +2160,7 @@ function DataHubSection({ notify }) {
 
       <DataTableCard
         title="Contacts"
-        subtitle="Recent website enquiries loaded in a lightweight snapshot."
+        subtitle="Recent website enquiries."
         rows={contacts}
         defaultSortKey="createdAt"
         columns={[
@@ -1610,9 +2221,12 @@ function EditableCollectionCard({
   fields,
   toggleField,
   toggleLabel,
+  liveToggles,
   onSave,
   onDelete,
-  extraActions
+  extraActions,
+  saving = false,
+  deleting = false
 }) {
   const [draft, setDraft] = useState(item);
 
@@ -1627,8 +2241,8 @@ function EditableCollectionCard({
         <div className="button-row">
           {extraActions}
           {onDelete ? (
-            <button type="button" className="danger-button" onClick={() => onDelete(item)}>
-              Delete
+            <button type="button" className="danger-button" onClick={() => onDelete(item)} disabled={deleting || saving}>
+              {deleting ? "Deleting..." : "Delete"}
             </button>
           ) : null}
         </div>
@@ -1663,12 +2277,35 @@ function EditableCollectionCard({
           <span>{toggleLabel}</span>
         </label>
       ) : null}
+      {Array.isArray(liveToggles) && liveToggles.length ? (
+        <div className="button-row">
+          {liveToggles.map((toggle) => (
+            <button
+              key={toggle.key}
+              type="button"
+              className={`switch ${toggle.checked ? "is-on" : ""}`}
+              onClick={() => toggle.onChange(!toggle.checked)}
+              disabled={Boolean(toggle.disabled)}
+              aria-pressed={toggle.checked}
+              title={toggle.label}
+            >
+              <span className="switch-thumb" />
+              <span className="sr-only">{toggle.label}</span>
+            </button>
+          ))}
+          {liveToggles.map((toggle) => (
+            <span key={`${toggle.key}-label`} className="muted">
+              {toggle.label}: {toggle.checked ? "On" : "Off"}
+            </span>
+          ))}
+        </div>
+      ) : null}
       <div className="button-row">
-        <button type="button" className="ghost-button" onClick={() => setDraft(item)}>
+        <button type="button" className="ghost-button" onClick={() => setDraft(item)} disabled={saving || deleting}>
           Cancel
         </button>
-        <button type="button" className="primary-button" onClick={() => onSave(draft, item)}>
-          Save
+        <button type="button" className="primary-button" onClick={() => onSave(draft, item)} disabled={saving || deleting}>
+          {saving ? "Saving..." : "Save"}
         </button>
       </div>
     </div>

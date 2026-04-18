@@ -1,4 +1,6 @@
 node_modules
 dist
-android
 .env
+android/.gradle
+android/**/build
+android/local.properties

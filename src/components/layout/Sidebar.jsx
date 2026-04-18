@@ -1,8 +1,11 @@
 const sections = [
   { id: "season", label: "Season" },
   { id: "categories", label: "Categories" },
-  { id: "contestants", label: "Contestants & Judges" },
+  { id: "teams", label: "Teams & Judges" },
   { id: "events", label: "Events" },
+  { id: "posters", label: "Posters" },
+  { id: "videos", label: "Videos" },
+  { id: "registration", label: "Registration" },
   { id: "voting", label: "Voting" },
   { id: "sponsors", label: "Sponsors" },
   { id: "rules", label: "Rules" },

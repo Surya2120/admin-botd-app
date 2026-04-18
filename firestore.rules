@@ -38,6 +38,20 @@ service cloud.firestore {
       allow update, delete: if isSignedIn();
     }
 
+    match /posters/{document=**} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /videos/{document=**} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /seasons/{document=**} {
+      allow read, write: if isSignedIn();
+    }
+
     match /settings/{document=**} {
       allow read: if true;
       allow write: if isSignedIn();
