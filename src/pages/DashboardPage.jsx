@@ -84,6 +84,7 @@ const DEFAULT_UI_CONTROLS = {
   showLeaderboard: true,
   registrationOpen: true,
   showInterestButton: true,
+  showRules: true,
   registrationClosedMessage: "AUDITIONS OPEN ON 20th APRIL",
 };
 const DEFAULT_EVENT_SIGNALS = { partyBlast: null };
@@ -1419,7 +1420,7 @@ function RegistrationSection({ actor, notify }) {
     try {
       await saveSettingsDoc(
         settingsDocs.uiControls,
-        { ...uiControlsState.data, registrationOpen },
+        { registrationOpen },
         actor,
         `Updated registrationOpen`,
         uiControlsState.data
@@ -1439,7 +1440,7 @@ function RegistrationSection({ actor, notify }) {
     try {
       await saveSettingsDoc(
         settingsDocs.uiControls,
-        { ...uiControlsState.data, showInterestButton },
+        { showInterestButton },
         actor,
         `Updated showInterestButton`,
         uiControlsState.data
@@ -1934,12 +1935,17 @@ function RulesSection({ actor }) {
     (onData, onError) => subscribeContentDoc(contentDocs.rules, onData, onError),
     defaultRulesContent
   );
+  const uiControlsState = useFirestoreSubscription(
+    (onData, onError) => subscribeSettingsDoc(settingsDocs.uiControls, DEFAULT_UI_CONTROLS, onData, onError),
+    DEFAULT_UI_CONTROLS
+  );
   const versionsState = useFirestoreSubscription(
     (onData, onError) => subscribeRuleVersions(onData, onError),
     []
   );
   const [draft, setDraft] = useState(defaultRulesContent);
   const [lastSaved, setLastSaved] = useState(null);
+  const [visibilitySaving, setVisibilitySaving] = useState(false);
 
   useEffect(() => {
     if (rulesState.data) setDraft(clone(rulesState.data));
@@ -1955,6 +1961,21 @@ function RulesSection({ actor }) {
       rulesState.data
     );
     setLastSaved({ type: "doc", section: contentDocs.rules, targetId: contentDocs.rules, previousValue: rulesState.data });
+  }
+
+  async function toggleRulesVisibility(value) {
+    setVisibilitySaving(true);
+    try {
+      await saveSettingsDoc(
+        settingsDocs.uiControls,
+        { showRules: Boolean(value) },
+        actor,
+        `${value ? "Enabled" : "Disabled"} rules and rulebook on website`,
+        uiControlsState.data
+      );
+    } finally {
+      setVisibilitySaving(false);
+    }
   }
 
   if (rulesState.loading) return <SectionSkeleton blocks={2} />;
@@ -1980,6 +2001,13 @@ function RulesSection({ actor }) {
     >
       <div className="grid-two">
         <div className="stack-lg">
+          <RealtimeControlCard
+            label="Show Rules & Rulebook"
+            description="When hidden, the website removes Rules & Regulations and disables the rulebook download."
+            checked={uiControlsState.data?.showRules !== false}
+            loading={visibilitySaving || uiControlsState.loading}
+            onChange={toggleRulesVisibility}
+          />
           <FormField label="Rules Title">
             <input value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} />
           </FormField>

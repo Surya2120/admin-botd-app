@@ -114,6 +114,7 @@ export async function seedAdminContentIfNeeded(actor = "system") {
       showLeaderboard: true,
       registrationOpen: true,
       showInterestButton: true,
+      showRules: true,
       registrationClosedMessage: "AUDITIONS OPEN ON 20th APRIL"
     },
     actor
